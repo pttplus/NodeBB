@@ -26,7 +26,7 @@ module.exports = function(Meta) {
 			if (err) {
 				title = Meta.config.browserTitle || 'NodeBB';
 			} else {
-				title = (Meta.config.browserTitle || 'NodeBB') + '::'  ＋ (title ? title : '');
+				title = (Meta.config.browserTitle || 'NodeBB') + '::' + (title ? title : '');
 			}
 
 			callback(null, title);
