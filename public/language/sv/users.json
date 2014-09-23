@@ -1,0 +1,10 @@
+{
+    "latest_users": "Senaste användarna",
+    "top_posters": "Flest inlägg",
+    "most_reputation": "Bäst rykte",
+    "search": "Sök",
+    "enter_username": "Ange ett användarnamn för att söka",
+    "load_more": "Ladda fler",
+    "user-not-found": "Användare hittades inte.",
+    "users-found-search-took": "%1 användare hittades! Sökningen tog %2 ms."
+}
