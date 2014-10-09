@@ -26,10 +26,10 @@ function deleteTempFiles(files) {
 function upload(req, res, filesIterator, next) {
 	var files = req.files.files;
 
-	if (!req.user) {
-		deleteTempFiles(files);
-		return res.json(403, 'not allowed');
-	}
+	// if (!req.user) {
+		// deleteTempFiles(files);
+		// return res.json(403, 'not allowed');
+	// }
 
 	if (!Array.isArray(files)) {
 		return res.json(500, 'invalid files');
