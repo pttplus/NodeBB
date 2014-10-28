@@ -7,6 +7,7 @@ var fs = require('fs'),
 	nconf = require('nconf'),
 	semver = require('semver'),
 	express = require('express'),
+	npm = require('npm'),
 
 	db = require('./database'),
 	emitter = require('./emitter'),
@@ -28,6 +29,7 @@ var fs = require('fs'),
 	Plugins.lessFiles = [];
 	Plugins.clientScripts = [];
 	Plugins.customLanguages = [];
+	Plugins.libraryPaths = [];
 
 	Plugins.initialized = false;
 
@@ -76,11 +78,13 @@ var fs = require('fs'),
 
 	Plugins.reload = function(callback) {
 		// Resetting all local plugin data
+		Plugins.libraries = {};
 		Plugins.loadedHooks = {};
 		Plugins.staticDirs = {};
 		Plugins.cssFiles.length = 0;
 		Plugins.lessFiles.length = 0;
 		Plugins.clientScripts.length = 0;
+		Plugins.libraryPaths.length = 0;
 
 		// Read the list of activated plugins and require their libraries
 		async.waterfall([
@@ -105,9 +109,6 @@ var fs = require('fs'),
 				});
 			},
 			function(next) {
-				if (global.env === 'development') {
-					winston.info('[plugins] Sorting hooks to fire in priority sequence');
-				}
 				Object.keys(Plugins.loadedHooks).forEach(function(hook) {
 					var hooks = Plugins.loadedHooks[hook];
 					hooks = hooks.sort(function(a, b) {
@@ -144,9 +145,10 @@ var fs = require('fs'),
 				return callback(pluginPath.match('nodebb-theme') ? null : err);
 			}
 
+			var pluginData, libraryPath, staticDir;
+
 			try {
-				var pluginData = JSON.parse(data),
-					libraryPath, staticDir;
+				pluginData = JSON.parse(data);
 			} catch (err) {
 				var pluginDir = pluginPath.split(path.sep);
 				pluginDir = pluginDir[pluginDir.length -1];
@@ -168,7 +170,7 @@ var fs = require('fs'),
 			// End backwards compatibility block (#1437)
 
 			if (pluginData.compatibility && semver.validRange(pluginData.compatibility)) {
-				if (semver.ltr(pkg.version, pluginData.compatibility)) {
+				if (!semver.gtr(pkg.version, pluginData.compatibility)) {
 					// NodeBB may not be new enough to run this plugin
 					process.stdout.write('\n');
 					winston.warn('[plugins/' + pluginData.id + '] This plugin may not be compatible with your version of NodeBB. This may cause unintended behaviour or crashing.');
@@ -186,6 +188,7 @@ var fs = require('fs'),
 							if (exists) {
 								if (!Plugins.libraries[pluginData.id]) {
 									Plugins.libraries[pluginData.id] = require(libraryPath);
+									Plugins.libraryPaths.push(libraryPath);
 								}
 
 								// Register hooks for this plugin
@@ -553,8 +556,6 @@ var fs = require('fs'),
 				return callback(err);
 			}
 
-			var npm = require('npm');
-
 			async.waterfall([
 				function(next) {
 					Plugins.isActive(id, next);
@@ -581,6 +582,17 @@ var fs = require('fs'),
 				});
 			});
 		});
+	};
+
+	Plugins.upgrade = function(id, callback) {
+		async.waterfall([
+			function(next) {
+				npm.load({}, next);
+			},
+			function(res, next) {
+				npm.commands.install([id], next);
+			}
+		], callback);
 	};
 
 	Plugins.getTemplates = function(callback) {
@@ -612,7 +624,7 @@ var fs = require('fs'),
 
 	Plugins.getAll = function(callback) {
 		var request = require('request');
-		request('http://npm.aws.af.cm/api/v1/plugins', function(err, res, body) {
+		request('https://packages.nodebb.org/api/v1/plugins', function(err, res, body) {
 			var plugins = [];
 
 			try {
@@ -628,6 +640,7 @@ var fs = require('fs'),
 				plugins[i].installed = false;
 				plugins[i].active = false;
 				plugins[i].url = plugins[i].repository ? plugins[i].repository.url : '';
+				plugins[i].latest = getLatestVersion(plugins[i].versions);
 				pluginMap[plugins[i].name] = plugins[i];
 			}
 
@@ -637,22 +650,17 @@ var fs = require('fs'),
 				}
 
 				async.each(installedPlugins, function(plugin, next) {
-
 					pluginMap[plugin.id] = pluginMap[plugin.id] || {};
 					pluginMap[plugin.id].id = pluginMap[plugin.id].id || plugin.id;
-					pluginMap[plugin.id].name = pluginMap[plugin.id].name || plugin.id;
+					pluginMap[plugin.id].name = plugin.name || pluginMap[plugin.id].name;
 					pluginMap[plugin.id].description = plugin.description;
 					pluginMap[plugin.id].url = pluginMap[plugin.id].url || plugin.url;
 					pluginMap[plugin.id].installed = true;
-
-					Plugins.isActive(plugin.id, function(err, active) {
-						if (err) {
-							return next(err);
-						}
-
-						pluginMap[plugin.id].active = active;
-						next();
-					});
+					pluginMap[plugin.id].active = plugin.active;
+					pluginMap[plugin.id].version = plugin.version;
+					pluginMap[plugin.id].latest = pluginMap[plugin.id].latest || plugin.version;
+					pluginMap[plugin.id].outdated = pluginMap[plugin.id].latest !== pluginMap[plugin.id].version;
+					next();
 				}, function(err) {
 					if (err) {
 						return callback(err);
@@ -667,12 +675,13 @@ var fs = require('fs'),
 					}
 
 					pluginArray.sort(function(a, b) {
-						if(a.installed && !b.installed) {
-							return -1;
-						} else if(!a.installed && b.installed) {
+						if (a.name > b.name ) {
 							return 1;
+						} else if (a.name < b.name ){
+							return -1;
+						} else {
+							return 0;
 						}
-						return 0;
 					});
 
 					callback(null, pluginArray);
@@ -680,6 +689,15 @@ var fs = require('fs'),
 			});
 		});
 	};
+
+	function getLatestVersion(versions) {
+		for(var version in versions) {
+			if (versions.hasOwnProperty(version) && versions[version] === 'latest') {
+				return version;
+			}
+		}
+		return '';
+	}
 
 	Plugins.isInstalled = function(id, callback) {
 		var pluginDir = path.join(__dirname, '../node_modules', id);
@@ -723,29 +741,38 @@ var fs = require('fs'),
 
 					async.waterfall([
 						function(next) {
-							fs.readFile(path.join(file, 'plugin.json'), next);
+							async.parallel({
+								packageJSON: function(next) {
+									fs.readFile(path.join(file, 'package.json'), next);
+								},
+								pluginJSON: function(next) {
+									fs.readFile(path.join(file, 'plugin.json'), next);
+								}
+							}, next);
 						},
-						function(configJSON, next) {
-							var config;
+						function(results, next) {
+							var packageInfo, pluginInfo;
 
 							try {
-								config = JSON.parse(configJSON);
+								packageInfo = JSON.parse(results.packageJSON);
+								pluginInfo = JSON.parse(results.pluginJSON);
 							} catch (err) {
 								winston.warn("Plugin: " + file + " is corrupted or invalid. Please check plugin.json for errors.");
 								return next(err, null);
 							}
 
-							Plugins.isActive(config.id, function(err, active) {
+							Plugins.isActive(packageInfo.name, function(err, active) {
 								if (err) {
 									next(new Error('no-active-state'));
 								}
 
-								delete config.library;
-								delete config.hooks;
-								config.active = active;
-								config.installed = true;
+								delete pluginInfo.hooks;
+								delete pluginInfo.library;
+								pluginInfo.active = active;
+								pluginInfo.installed = true;
+								pluginInfo.version = packageInfo.version;
 
-								next(null, config);
+								next(null, pluginInfo);
 							});
 						}
 					], function(err, config) {
@@ -765,7 +792,16 @@ var fs = require('fs'),
 		});
 	};
 
+	Plugins.clearRequireCache = function(next) {
+		async.map(Plugins.libraryPaths, fs.realpath, function(err, paths) {
+			for (var x=0,numPaths=paths.length;x<numPaths;x++) {
+				delete require.cache[paths[x]];
+			}
+			winston.info('[plugins] Plugin libraries removed from Node.js cache');
 
+			next();
+		});
+	};
 
 	function addLanguages(router, middleware, controllers, callback) {
 		Plugins.customLanguages.forEach(function(lang) {

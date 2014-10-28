@@ -8,14 +8,16 @@ var uglifyjs = require('uglify-js'),
 	crypto = require('crypto'),
 
 	Minifier = {
-		js: {},
-		css: {}
+		js: {}
 	};
 
 /* Javascript */
 Minifier.js.minify = function (scripts, relativePath, minify, callback) {
 	var options = {
-		compress: false
+		compress: false,
+		sourceMapURL: '/nodebb.min.js.map',
+		outSourceMap: 'nodebb.min.js.map',
+		sourceRoot: relativePath
 	};
 
 	scripts = scripts.filter(function(file) {
@@ -23,9 +25,6 @@ Minifier.js.minify = function (scripts, relativePath, minify, callback) {
 	});
 
 	if (!minify) {
-		options.sourceMapURL = '/nodebb.min.js.map';
-		options.outSourceMap = 'nodebb.min.js.map';
-		options.sourceRoot = relativePath;
 		options.mangle = false;
 		options.prefix = 1;
 	}
@@ -59,16 +58,9 @@ process.on('message', function(payload) {
 	switch(payload.action) {
 	case 'js':
 		Minifier.js.minify(payload.scripts, payload.relativePath, payload.minify, function(data) {
-			process.stdout.write(data.js);
 			process.send({
 				type: 'end',
-				payload: 'script'
-			});
-
-			process.stderr.write(data.map);
-			process.send({
-				type: 'end',
-				payload: 'mapping'
+				data: data
 			});
 		});
 		break;

@@ -50,7 +50,7 @@ function tagRoutes(app, middleware, controllers) {
 
 function categoryRoutes(app, middleware, controllers) {
 	setupPageRoute(app, '/popular/:term?', middleware, [], controllers.categories.popular);
-	setupPageRoute(app, '/recent/:term?', middleware, [], controllers.categories.recent);
+	setupPageRoute(app, '/recent', middleware, [], controllers.categories.recent);
 	setupPageRoute(app, '/unread', middleware, [middleware.authenticate], controllers.categories.unread);
 	app.get('/api/unread/total', middleware.authenticate, controllers.categories.unreadTotal);
 
@@ -149,6 +149,16 @@ module.exports = function(app, middleware) {
 		require('./debug')(app, middleware, controllers);
 	}
 
+	app.use(function(req, res, next) {
+		if (req.user || parseInt(meta.config.privateUploads, 10) !== 1) {
+			return next();
+		}
+		if (req.path.indexOf('/uploads/files') === 0) {
+			return res.status(403).json('not-allowed');
+		}
+		next();
+	});
+
 	app.use(relativePath, express.static(path.join(__dirname, '../../', 'public'), {
 		maxAge: app.enabled('cache') ? 5184000000 : 0
 	}));
@@ -172,20 +182,20 @@ function handleErrors(err, req, res, next) {
 
 	req.flash('errorMessage', err.message);
 
-	res.redirect(nconf.get('relative_path') + '/500')
+	res.redirect(nconf.get('relative_path') + '/500');
 }
 
 function catch404(req, res, next) {
 	var relativePath = nconf.get('relative_path');
 	var	isLanguage = new RegExp('^' + relativePath + '/language/[\\w]{2,}/.*.json'),
-		isClientScript = new RegExp('^' + relativePath + '\\/src\\/forum(\\/admin)?\\/.+\\.js');
+		isClientScript = new RegExp('^' + relativePath + '\\/src\\/.+\\.js');
 
 	res.status(404);
 
 	if (isClientScript.test(req.url)) {
-		res.type('text/javascript').send(200, '');
+		res.type('text/javascript').status(200).send('');
 	} else if (isLanguage.test(req.url)) {
-		res.json(200, {});
+		res.status(200).json({});
 	} else if (req.accepts('html')) {
 		if (process.env.NODE_ENV === 'development') {
 			winston.warn('Route requested but not found: ' + req.url);

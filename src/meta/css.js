@@ -15,9 +15,7 @@ var winston = require('winston'),
 
 module.exports = function(Meta) {
 
-	Meta.css = {
-		'css-buster': +new Date()
-	};
+	Meta.css = {};
 	Meta.css.cache = undefined;
 	Meta.css.acpCache = undefined;
 	Meta.css.branding = {};
@@ -74,6 +72,8 @@ module.exports = function(Meta) {
 						});
 					}
 
+					emitter.emit('meta:css.compiled');
+
 					if (typeof callback === 'function') {
 						callback();
 					}
@@ -87,16 +87,41 @@ module.exports = function(Meta) {
 	};
 
 	Meta.css.commitToFile = function(filename) {
-		winston.info('[meta/css] Committing stylesheet (' + filename + ') to disk');
-		fs.writeFile(path.join(__dirname, '../../public/' + (filename === 'acpCache' ? 'admin' : 'stylesheet') + '.css'), Meta.css[filename], function(err) {
+		var file = (filename === 'acpCache' ? 'admin' : 'stylesheet') + '.css';
+
+		fs.writeFile(path.join(__dirname, '../../public/' + file), Meta.css[filename], function(err) {
 			if (!err) {
-				winston.info('[meta/css] Stylesheet (' + filename + ') committed to disk.');
+				winston.info('[meta/css] ' + file + ' committed to disk.');
 			} else {
 				winston.error('[meta/css] ' + err.message);
 				process.exit(0);
 			}
 		});
-	}
+	};
+
+	Meta.css.getFromFile = function(callback) {
+		var cachePath = path.join(__dirname, '../../public/stylesheet.css'),
+			acpCachePath = path.join(__dirname, '../../public/admin.css');
+		fs.exists(cachePath, function(exists) {
+			if (exists) {
+				if (!cluster.isWorker || process.env.cluster_setup === 'true') {
+					winston.info('[meta/css] (Experimental) Reading stylesheets from file');
+					async.map([cachePath, acpCachePath], fs.readFile, function(err, files) {
+						Meta.css.cache = files[0];
+						Meta.css.acpCache = files[1];
+
+						emitter.emit('meta:css.compiled');
+						callback();
+					});
+				} else {
+					callback();
+				}
+			} else {
+				winston.warn('[meta/css] (Experimental) No stylesheets found on disk, re-minifying');
+				Meta.css.minify.apply(Meta.css, arguments);
+			}
+		});
+	};
 
 	function minify(source, paths, destination, callback) {	
 		var	parser = new (less.Parser)({
@@ -112,8 +137,10 @@ module.exports = function(Meta) {
 				return;
 			}
 
+			var css;
+
 			try {
-				var css = tree.toCSS({
+				css = tree.toCSS({
 					cleancss: true
 				});
 			} catch (err) {
@@ -127,14 +154,10 @@ module.exports = function(Meta) {
 			Meta.css[destination] = css;
 
 			// Calculate css buster
-			var hasher = crypto.createHash('md5'),
-				hash;
-			hasher.update(css, 'utf-8');
-			hash = hasher.digest('hex').slice(0, 8);
-			Meta.css.hash = hash;
+			var hasher = crypto.createHash('md5');
 
-			winston.info('[meta/css] Done.');
-			emitter.emit('meta:css.compiled');
+			hasher.update(css, 'utf-8');
+			Meta.css.hash = hasher.digest('hex').slice(0, 8);
 
 			// Save the compiled CSS in public/ so things like nginx can serve it
 			if (!cluster.isWorker || process.env.cluster_setup === 'true') {

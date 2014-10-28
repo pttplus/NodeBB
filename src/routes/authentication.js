@@ -21,7 +21,6 @@
 
 	function logout(req, res) {
 		if (req.user && parseInt(req.user.uid, 10) > 0) {
-			winston.info('[Auth] Session ' + req.sessionID + ' logout (uid: ' + req.user.uid + ')');
 
 			var ws = require('../socket.io');
 			ws.logoutUser(req.user.uid);
@@ -29,58 +28,63 @@
 			req.logout();
 		}
 
-		res.send(200);
+		res.status(200).send('');
 	}
 
 	function login(req, res, next) {
 		var continueLogin = function() {
-			passport.authenticate('local', function(err, userData, info) {
-				if (err) {
-					req.flash('error', info);
-					return res.redirect(nconf.get('relative_path') + '/login');
-				}
-
-				if (!userData) {
-					if (typeof info === 'object') {
-						info = '[[error:invalid-username-or-password]]';
+				passport.authenticate('local', function(err, userData, info) {
+					if (err) {
+						req.flash('error', info);
+						return res.redirect(nconf.get('relative_path') + '/login');
 					}
 
-					req.flash('error', info);
-					return res.redirect(nconf.get('relative_path') + '/login');
-				}
+					if (!userData) {
+						if (typeof info === 'object') {
+							info = '[[error:invalid-username-or-password]]';
+						}
 
-				// Alter user cookie depending on passed-in option
-				if (req.body.remember === 'on') {
-					var duration = 1000*60*60*24*parseInt(meta.config.loginDays || 14, 10);
-					req.session.cookie.maxAge = duration;
-					req.session.cookie.expires = new Date(Date.now() + duration);
-				} else {
-					req.session.cookie.maxAge = false;
-					req.session.cookie.expires = false;
-				}
-
-				req.login({
-					uid: userData.uid
-				}, function() {
-					if (userData.uid) {
-						user.logIP(userData.uid, req.ip);
-
-						plugins.fireHook('action:user.loggedIn', userData.uid);
+						req.flash('error', info);
+						return res.redirect(nconf.get('relative_path') + '/login');
 					}
 
-					if (!req.session.returnTo) {
-						res.redirect(nconf.get('relative_path') + '/');
+					// Alter user cookie depending on passed-in option
+					if (req.body.remember === 'on') {
+						var duration = 1000*60*60*24*parseInt(meta.config.loginDays || 14, 10);
+						req.session.cookie.maxAge = duration;
+						req.session.cookie.expires = new Date(Date.now() + duration);
 					} else {
-						var next = req.session.returnTo;
-						delete req.session.returnTo;
-						res.redirect(nconf.get('relative_path') + next);
+						req.session.cookie.maxAge = false;
+						req.session.cookie.expires = false;
 					}
-				});
-			})(req, res, next);
-		};
+
+					req.login({
+						uid: userData.uid
+					}, function() {
+						if (userData.uid) {
+							user.logIP(userData.uid, req.ip);
+
+							plugins.fireHook('action:user.loggedIn', userData.uid);
+						}
+
+						if (!req.session.returnTo) {
+							res.redirect(nconf.get('relative_path') + '/');
+						} else {
+							var next = req.session.returnTo;
+							delete req.session.returnTo;
+							res.redirect(nconf.get('relative_path') + next);
+						}
+					});
+				})(req, res, next);
+			};
 
 		if(meta.config.allowLocalLogin !== undefined && parseInt(meta.config.allowLocalLogin, 10) === 0) {
-			return res.send(404);
+			return res.status(404).send('');
+		}
+
+		// Handle returnTo data
+		if (req.body.hasOwnProperty('returnTo') && !req.session.returnTo) {
+			req.session.returnTo = req.body.returnTo;
 		}
 
 		if (req.body.username && utils.isEmailValid(req.body.username)) {
@@ -98,7 +102,7 @@
 
 	function register(req, res) {
 		if(meta.config.allowRegistration !== undefined && parseInt(meta.config.allowRegistration, 10) === 0) {
-			return res.send(403);
+			return res.status(403).send('');
 		}
 
 		var userData = {};
@@ -221,8 +225,7 @@
 
 	Auth.login = function(username, password, next) {
 		if (!username || !password) {
-			next(new Error('[[error:invalid-password]]'));
-			return;
+			return next(new Error('[[error:invalid-password]]'));
 		}
 
 		var userslug = utils.slugify(username);
@@ -232,7 +235,7 @@
 				return next(err);
 			}
 
-			if(!uid) {
+			if (!uid) {
 				return next(null, false, '[[error:no-user]]');
 			}
 

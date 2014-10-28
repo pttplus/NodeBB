@@ -7,10 +7,15 @@ function apiRoutes(app, middleware, controllers) {
 	// todo, needs to be in api namespace
 	app.get('/users/csv', middleware.authenticate, controllers.admin.users.getCSV);
 
-	app.post('/category/uploadpicture', middleware.applyCSRF, middleware.authenticate, controllers.admin.uploads.uploadCategoryPicture);
-	app.post('/uploadfavicon', middleware.applyCSRF, middleware.authenticate, controllers.admin.uploads.uploadFavicon);
-	app.post('/uploadlogo', middleware.applyCSRF, middleware.authenticate, controllers.admin.uploads.uploadLogo);
-	app.post('/uploadgravatardefault', middleware.applyCSRF, middleware.authenticate, controllers.admin.uploads.uploadGravatarDefault);
+	var multipart = require('connect-multiparty');
+	var multipartMiddleware = multipart();
+
+	var middlewares = [multipartMiddleware, middleware.applyCSRF, middleware.authenticate];
+
+	app.post('/category/uploadpicture', middlewares, controllers.admin.uploads.uploadCategoryPicture);
+	app.post('/uploadfavicon', middlewares, controllers.admin.uploads.uploadFavicon);
+	app.post('/uploadlogo', middlewares, controllers.admin.uploads.uploadLogo);
+	app.post('/uploadgravatardefault', middlewares, controllers.admin.uploads.uploadGravatarDefault);
 }
 
 function adminRouter(middleware, controllers) {
@@ -46,11 +51,14 @@ function addRoutes(router, middleware, controllers) {
 
 	router.get('/manage/tags', controllers.admin.tags.get);
 
-	router.get('/manage/users', controllers.admin.users.search);
+	router.get('/manage/flags', controllers.admin.flags.get);
+
+	router.get('/manage/users', controllers.admin.users.sortByJoinDate);
 	router.get('/manage/users/search', controllers.admin.users.search);
 	router.get('/manage/users/latest', controllers.admin.users.sortByJoinDate);
 	router.get('/manage/users/sort-posts', controllers.admin.users.sortByPosts);
 	router.get('/manage/users/sort-reputation', controllers.admin.users.sortByReputation);
+	router.get('/manage/users/banned', controllers.admin.users.banned);
 
 	router.get('/manage/groups', controllers.admin.groups.get);
 
@@ -63,6 +71,7 @@ function addRoutes(router, middleware, controllers) {
 
 	router.get('/advanced/database', controllers.admin.database.get);
 	router.get('/advanced/events', controllers.admin.events.get);
+	router.get('/advanced/logs', controllers.admin.logs.get);
 
 	router.get('/development/logger', controllers.admin.logger.get);
 }

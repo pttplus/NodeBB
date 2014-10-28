@@ -19,7 +19,7 @@ var apiToRegular = function(url) {
 categoriesController.recent = function(req, res, next) {
 	var uid = req.user ? req.user.uid : 0;
 	var end = (parseInt(meta.config.topicsPerList, 10) || 20) - 1;
-	topics.getLatestTopics(uid, 0, end, req.params.term, function (err, data) {
+	topics.getRecentTopics(uid, 0, end, function (err, data) {
 		if (err) {
 			return next(err);
 		}
@@ -27,6 +27,9 @@ categoriesController.recent = function(req, res, next) {
 		data['feeds:disableRSS'] = parseInt(meta.config['feeds:disableRSS'], 10) === 1;
 
 		plugins.fireHook('filter:category.get', data, uid, function(err, data) {
+			if (err) {
+				return next(err);
+			}
 			res.render('recent', data);
 		});
 	});
@@ -53,6 +56,9 @@ categoriesController.popular = function(req, res, next) {
 		data['feeds:disableRSS'] = parseInt(meta.config['feeds:disableRSS'], 10) === 1;
 
 		plugins.fireHook('filter:category.get', {topics: data}, uid, function(err, data) {
+			if (err) {
+				return next(err);
+			}
 			if (uid === 0) {
 		        anonCache[term] = data;
 		        lastUpdateTime = Date.now();
@@ -72,6 +78,9 @@ categoriesController.unread = function(req, res, next) {
 		}
 
 		plugins.fireHook('filter:category.get', data, uid, function(err, data) {
+			if (err) {
+				return next(err);
+			}
 			res.render('unread', data);
 		});
 	});
@@ -227,17 +236,26 @@ categoriesController.get = function(req, res, next) {
 };
 
 categoriesController.notFound = function(req, res) {
-	res.locals.isAPI ? res.json(404, 'not-found') : res.status(404).render('404');
+	if (res.locals.isAPI) {
+		res.status(404).json('not-found');
+	} else {
+		res.status(404).render('404');
+	}
 };
 
 categoriesController.notAllowed = function(req, res) {
 	var uid = req.user ? req.user.uid : 0;
+
 	if (uid) {
-		res.locals.isAPI ? res.json(403, 'not-allowed') : res.status(403).render('403');
+		if (res.locals.isAPI) {
+			res.status(403).json('not-allowed');
+		} else {
+			res.status(403).render('403');
+		}
 	} else {
 		if (res.locals.isAPI) {
 			req.session.returnTo = apiToRegular(req.url);
-			res.json(401, 'not-authorized');
+			res.status(401).json('not-authorized');
 		} else {
 			req.session.returnTo = req.url;
 			res.redirect(nconf.get('relative_path') + '/login');

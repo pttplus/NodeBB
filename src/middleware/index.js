@@ -1,11 +1,11 @@
 "use strict";
 
-var utils = require('./../../public/src/utils'),
-	meta = require('./../meta'),
-	plugins = require('./../plugins'),
-	db = require('./../database'),
-	auth = require('./../routes/authentication'),
-	emitter = require('./../emitter'),
+var utils = require('../../public/src/utils'),
+	meta = require('../meta'),
+	plugins = require('../plugins'),
+	db = require('../database'),
+	auth = require('../routes/authentication'),
+	emitter = require('../emitter'),
 
 	async = require('async'),
 	path = require('path'),
@@ -19,7 +19,6 @@ var utils = require('./../../public/src/utils'),
 	cookieParser = require('cookie-parser'),
 	compression = require('compression'),
 	favicon = require('serve-favicon'),
-	multipart = require('connect-multiparty'),
 	session = require('express-session'),
 	cluster = require('cluster'),
 
@@ -30,8 +29,9 @@ var utils = require('./../../public/src/utils'),
 var middleware = {};
 
 function routeCurrentTheme(app, themeId, themesData) {
-	var themeId = (themeId || 'nodebb-theme-vanilla'),
-		themeObj = (function(id) {
+	themeId = (themeId || 'nodebb-theme-vanilla');
+
+	var	themeObj = (function(id) {
 			return themesData.filter(function(themeObj) {
 				return themeObj.id === id;
 			})[0];
@@ -43,6 +43,13 @@ function routeCurrentTheme(app, themeId, themesData) {
 	}
 
 	meta.themes.setPath(themeObj);
+}
+
+function setupFavicon(app) {
+	var faviconPath = path.join(__dirname, '../../', 'public', meta.config['brand:favicon'] ? meta.config['brand:favicon'] : 'favicon.ico');
+	if (fs.existsSync(faviconPath)) {
+		app.use(favicon(faviconPath));
+	}
 }
 
 module.exports = function(app, data) {
@@ -61,7 +68,8 @@ module.exports = function(app, data) {
 
 	app.use(compression());
 
-	app.use(favicon(path.join(__dirname, '../../', 'public', meta.config['brand:favicon'] ? meta.config['brand:favicon'] : 'favicon.ico')));
+	setupFavicon(app);
+
 	app.use(relativePath + '/apple-touch-icon', middleware.routeTouchIcon);
 
 	app.use(bodyParser.urlencoded({extended: true}));
@@ -83,8 +91,6 @@ module.exports = function(app, data) {
 		resave: true,
 		saveUninitialized: true
 	}));
-
-	app.use(multipart());
 
 	app.use(function (req, res, next) {
 		res.setHeader('X-Powered-By', 'NodeBB');

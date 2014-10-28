@@ -10,13 +10,17 @@ module.exports = function(db, module) {
 		if (!key) {
 			return callback();
 		}
-		data._key = key;
-		db.collection('objects').update({_key:key}, {$set:data}, {upsert:true, w: 1}, function(err) {
+
+		db.collection('objects').update({_key: key}, {$set: data}, {upsert: true, w: 1}, function(err) {
 			callback(err);
 		});
 	};
 
 	module.setObjectField = function(key, field, value, callback) {
+		callback = callback || helpers.noop;
+		if (!field) {
+			return callback();
+		}
 		var data = {};
 		field = helpers.fieldToString(field);
 		data[field] = value;
@@ -27,7 +31,7 @@ module.exports = function(db, module) {
 		if (!key) {
 			return callback();
 		}
-		db.collection('objects').findOne({_key: key}, {_id:0, _key:0}, callback);
+		db.collection('objects').findOne({_key: key}, {_id: 0, _key: 0}, callback);
 	};
 
 	module.getObjects = function(keys, callback) {
@@ -87,7 +91,7 @@ module.exports = function(db, module) {
 			item = item || {};
 			var result = {};
 			for(i=0; i<fields.length; ++i) {
-				result[fields[i]] = item[fields[i]] || null;
+				result[fields[i]] = item[fields[i]] !== undefined ? item[fields[i]] : null;
 			}
 			callback(null, result);
 		});
@@ -172,7 +176,7 @@ module.exports = function(db, module) {
 
 	module.deleteObjectField = function(key, field, callback) {
 		callback = callback || helpers.noop;
-		if (!key) {
+		if (!key || !field) {
 			return callback();
 		}
 		var data = {};
@@ -198,7 +202,7 @@ module.exports = function(db, module) {
 		field = helpers.fieldToString(field);
 		data[field] = value;
 
-		db.collection('objects').findAndModify({_key: key}, {}, {$inc: data}, {new:true, upsert:true}, function(err, result) {
+		db.collection('objects').findAndModify({_key: key}, {}, {$inc: data}, {new: true, upsert: true}, function(err, result) {
 			callback(err, result ? result[field] : null);
 		});
 	};

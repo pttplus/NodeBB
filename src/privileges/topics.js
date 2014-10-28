@@ -53,8 +53,8 @@ module.exports = function(privileges) {
 				var deletable = isAdminOrMod || results.isOwner;
 
 				callback(null, {
-					'topics:reply': results['topics:reply'][0],
-					read: results.read[0],
+					'topics:reply': results['topics:reply'][0] || isAdminOrMod,
+					read: results.read[0] || isAdminOrMod,
 					view_thread_tools: editable || deletable,
 					editable: editable,
 					deletable: deletable,

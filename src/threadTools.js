@@ -72,7 +72,7 @@ var winston = require('winston'),
 	}
 
 	ThreadTools.purge = function(tid, uid, callback) {
-		batch.processSortedSet('tid:' + tid + ':posts', function(err, pids, next) {
+		batch.processSortedSet('tid:' + tid + ':posts', function(pids, next) {
 			async.eachLimit(pids, 10, posts.purge, next);
 		}, {alwaysStartAt: 0}, function(err) {
 			if (err) {
@@ -206,6 +206,8 @@ var winston = require('winston'),
 			categories.moveRecentReplies(tid, oldCid, cid);
 
 			topics.setTopicField(tid, 'cid', cid, callback);
+
+			events.logTopicMove(uid, tid);
 
 			plugins.fireHook('action:topic.move', {
 				tid: tid,

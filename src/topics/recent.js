@@ -15,13 +15,35 @@ module.exports = function(Topics) {
 		year: 31104000000
 	};
 
+	Topics.getRecentTopics = function(uid, start, end, callback) {
+		async.waterfall([
+			function(next) {
+				db.getSortedSetRevRange('topics:recent', start, end, next);
+			},
+			function(tids, next) {
+				Topics.getTopics('topics:recent', uid, tids, next);
+			},
+			function(data, next) {
+				data.nextStart = end + 1;
+				next(null, data);
+			}
+		], callback);
+	};
+
 	Topics.getLatestTopics = function(uid, start, end, term, callback) {
 		Topics.getLatestTids(start, end, term, function(err, tids) {
-			if(err) {
+			if (err) {
 				return callback(err);
 			}
 
-			Topics.getTopics('topics:recent', uid, tids, callback);
+			Topics.getTopics('topics:recent', uid, tids, function(err, data) {
+				if (err) {
+					return callback(err);
+				}
+
+				data.nextStart = end + 1;
+				callback(null, data);
+			});
 		});
 	};
 

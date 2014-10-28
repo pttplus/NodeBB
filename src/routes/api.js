@@ -26,10 +26,10 @@ function deleteTempFiles(files) {
 function upload(req, res, filesIterator, next) {
 	var files = req.files.files;
 
-	// if (!req.user) {
-		// deleteTempFiles(files);
-		// return res.json(403, 'not allowed');
-	// }
+	if (!req.user) {
+		deleteTempFiles(files);
+		return res.json(403, 'not allowed');
+	}
 
 	if (!Array.isArray(files)) {
 		return res.json(500, 'invalid files');
@@ -43,12 +43,12 @@ function upload(req, res, filesIterator, next) {
 		deleteTempFiles(files);
 
 		if (err) {
-			return res.send(500, err.message);
+			return res.status(500).send(err.message);
 		}
 
 		// IE8 - send it as text/html so browser won't trigger a file download for the json response
 		// malsup.com/jquery/form/#file-upload
-		res.send(200, req.xhr ? images : JSON.stringify(images));
+		res.status(200).send(req.xhr ? images : JSON.stringify(images));
 	});
 }
 
@@ -115,7 +115,7 @@ function uploadFile(file, callback) {
 		}
 
 		var filename = 'upload-' + utils.generateUUID() + path.extname(file.name);
-		require('../file').saveFileToLocal(filename, file.path, function(err, upload) {
+		require('../file').saveFileToLocal(filename, 'files', file.path, function(err, upload) {
 			if(err) {
 				return callback(err);
 			}
@@ -206,8 +206,11 @@ module.exports =  function(app, middleware, controllers) {
 	router.get('/categories/:cid/moderators', getModerators);
 	router.get('/recent/posts/:term?', getRecentPosts);
 
-	router.post('/post/upload', middleware.applyCSRF, uploadPost);
-	router.post('/topic/thumb/upload', middleware.applyCSRF, uploadThumb);
-	router.post('/user/:userslug/uploadpicture', middleware.applyCSRF, middleware.authenticate, middleware.checkGlobalPrivacySettings, middleware.checkAccountPermissions, controllers.accounts.uploadPicture);
+	var multipart = require('connect-multiparty');
+	var multipartMiddleware = multipart();
+
+	router.post('/post/upload', multipartMiddleware, middleware.applyCSRF, uploadPost);
+	router.post('/topic/thumb/upload', multipartMiddleware, middleware.applyCSRF, uploadThumb);
+	router.post('/user/:userslug/uploadpicture', multipartMiddleware, middleware.applyCSRF, middleware.authenticate, middleware.checkGlobalPrivacySettings, middleware.checkAccountPermissions, controllers.accounts.uploadPicture);
 
 };

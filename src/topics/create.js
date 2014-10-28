@@ -10,6 +10,7 @@ var async = require('async'),
 	meta = require('../meta'),
 	posts = require('../posts'),
 	threadTools = require('../threadTools'),
+	postTools = require('../postTools'),
 	privileges = require('../privileges'),
 	categories = require('../categories');
 
@@ -160,6 +161,10 @@ module.exports = function(Topics) {
 
 				plugins.fireHook('action:topic.post', data.topicData);
 
+				if (parseInt(uid, 10)) {
+					user.notifications.sendTopicNotificationToFollowers(uid, data.topicData, data.postData);
+				}
+
 				next(null, {
 					topicData: data.topicData,
 					postData: data.postData
@@ -237,13 +242,16 @@ module.exports = function(Topics) {
 					},
 					postIndex: function(next) {
 						posts.getPidIndex(postData.pid, uid, next);
+					},
+					content: function(next) {
+						postTools.parse(postData.content, next);
 					}
 				}, next);
 			},
 			function(results, next) {
 				postData.user = results.userInfo[0];
-				results.topicInfo.title = validator.escape(results.topicInfo.title);
 				postData.topic = results.topicInfo;
+				postData.content = results.content;
 
 				if (results.settings.followTopicsOnReply) {
 					threadTools.follow(postData.tid, uid);
@@ -257,11 +265,10 @@ module.exports = function(Topics) {
 				postData.relativeTime = utils.toISOString(postData.timestamp);
 
 				if (parseInt(uid, 10)) {
-					Topics.notifyFollowers(tid, postData.pid, uid);
-
-					user.notifications.sendPostNotificationToFollowers(uid, tid, postData.pid);
+					Topics.notifyFollowers(postData, uid);
 				}
 
+				postData.topic.title = validator.escape(postData.topic.title);
 				next(null, postData);
 			}
 		], callback);
